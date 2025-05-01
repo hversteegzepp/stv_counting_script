@@ -1,27 +1,47 @@
+import argparse
 import csv
-from fractions import Fraction
 from dataclasses import dataclass
+from fractions import Fraction
+from pathlib import Path
 
-# for fully blank ballots, omit entry in CSV input file
-# for partially filled out ballots, only add the given preferences in order
+parser = argparse.ArgumentParser()
+parser.add_argument('--seats', help='Number of fillable seats')
+parser.add_argument('--file', help='CSV file with correctly formatted voting results')
+args = parser.parse_args()
 
-num_seats: int = 3  # number of fillable seats
+num_seats: int = int(args.seats)
+votes_file: Path = Path(args.file)
 
 
 @dataclass
 class WeightedBallot:
-    preferences: list
+    preferences: list[str]
     weight: Fraction
 
 
-with open('votes.csv', 'r') as votes_file:
+with open(votes_file, 'r') as votes_file:
     csv_reader = csv.reader(votes_file)
     # combined list of ballot votes + current round weights
-    # remove empty preference spots
-    ballot_list = [
-        WeightedBallot(preferences=[preference for preference in ballot if preference], weight=Fraction(1))
-        for ballot in csv_reader
-    ]
+    ballot_list = []
+    for i, row in enumerate(csv_reader):
+        if i == 0:
+            # collect all candidate names from first/header row of csv file, keep order
+            ordered_candidates = row
+        else:
+            # check for preference order validity (no duplicate numbers, discounting blank preferences)
+            _pref_nums = [int(n) for n in row if n]
+            assert len(_pref_nums) == len(set(_pref_nums)), 'Invalid ballot encountered (duplicate preference number)'
+            # mapping from preference order to candidate name for this row/ballot
+            # (removes empty preference spots)
+            _pref_map = {int(ind): name for ind, name in zip(row, ordered_candidates) if ind}
+            # for each ballot object, sort the preference mapping by index, and store the sorted list of names
+            ballot_list.append(
+                WeightedBallot(
+                    preferences=[name for _, name in sorted(_pref_map.items())],
+                    weight=Fraction(1),
+                )
+            )
+
 
 # collect all candidate names which appear on at least one ballot
 remaining_candidates = set()
